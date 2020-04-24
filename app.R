@@ -10,7 +10,7 @@ library(dplyr)
 library(htmlwidgets)
 library(ggplot2)     # for plotting
 library(grDevices)   # for windowsFont function
-
+library(stringr)
 library(shinydashboard)
 source("Dotmap_Functions.R")
 
@@ -19,7 +19,7 @@ source("Dotmap_Functions.R")
 adjA <- 13000 # Factor for circle size adjustment
 adjL <- 100   # Factor for line size 
 antkom <- 20  # Number of possible connections
-years_all <- c("2017","2018", "2019") # Possible selectable years
+years_all <- c("2017", "2018", "2019") # Possible selectable years
 circ_size <- list("Liten" = 16000, "Middels" = 24000, "Stor" = 64000)
 
 # set intial kommune values for choices to NULL
@@ -28,8 +28,9 @@ geodata <- NULL
 
 # Define UI for application 
 ui <- dashboardPage(
-  dashboardHeader(title = "Pendlingsstrømmer"),
+  dashboardHeader(title = "Pendlingsstrømmer", titleWidth = 280),
   dashboardSidebar(
+    width = 280,
     selectInput("year", 
                 label = "Velg år",
                 choices = years_all,
@@ -53,10 +54,13 @@ ui <- dashboardPage(
     br(),
     br(),
     br(),
-    img(src="ssb-logo.png", align = "left")
+    HTML('<left><img src="ssb-logo.png", width = "200"></left>')
   ),
     
   dashboardBody(
+    tags$head(
+      tags$link(rel = "stylesheet", type = "text/css", href = "custom.css")
+    ),
     tabsetPanel(
       id = "display_panel",
       tabPanel("Bosted",
@@ -64,11 +68,9 @@ ui <- dashboardPage(
                       leafletOutput("map", height = 500)),
                       
                 # Placement and spec. for the plot on right
-                column(4,
-                      uiOutput("selected_komm"), # not textOutput
-                      tags$head(tags$style("#selected_komm{color: #274247; font-size: 16px;}")), # Open Sans not working font-family: 'Open Sans', regular;})), 
-                      uiOutput("selected_komm_text"),
-                      tags$head(tags$style("#selected_komm_text{color: #274247; font-size: 10px;}")),
+                column(4, offset = 0, style='padding:0px;',
+                      h1("Hvor arbeider sysselsatte personer i..."),
+                      h2(uiOutput("selected_komm")), # not textOutput
                       plotOutput("plot")
                       )
                ),
@@ -78,14 +80,16 @@ ui <- dashboardPage(
                       leafletOutput("map_arb", height = 500)),
                
                # Placement and spec. for the plot on right
-               column(4,
-                      uiOutput("selected_komm_arb"), #not textOutput
-                      tags$head(tags$style("#selected_komm_arb{color: #274247; font-size: 16px;}")), # Open Sans not working font-family: 'Open Sans', regular;})), 
-                      uiOutput("selected_komm_arb_text"),
-                      tags$head(tags$style("#selected_komm_arb_text{color: #274247; font-size: 10px;}")),
+               column(4, offset = 0, style='padding:0px;',
+                      h1("Hvor bor sysselsatte personer i..."),
+                      h2(uiOutput("selected_komm_arb")), #not textOutput
+                      #tags$head(tags$style("#selected_komm_arb{color: #274247; font-size: 16px;}")), # Open Sans not working font-family: 'Open Sans', regular;})), 
                       plotOutput("plot_arb")
                )
     )
+  ),
+  tags$head(
+    tags$link(rel = "stylesheet", type = "text/css", href = "custom.css")
   )
 )
 )
@@ -102,8 +106,6 @@ server <- function(input, output, session){
   statdata <- reactiveValues()                    # For the statistical data values
   circdata <- reactiveValues()                    # For the circle sizes (bosted)
   circdata_arb <- reactiveValues()                # For the circle sizes (arbeidssted)
-  #tab_year <- reactiveValues(bosted = years_all[length(years_all)])
-  #tab_year <- reactiveValues(arbsted = years_all[length(years_all)])
     
   # Spesifications for base map - bosted
   output$map <- renderLeaflet({
@@ -130,7 +132,7 @@ server <- function(input, output, session){
                  width = 80, height = 100,
                  zoomLevelFixed = 2) %>%
       setView(lng=11.00, lat=59.50, zoom = 9) %>%
-      addLegend(position=c("topright"), colors=c("#006CB6", "#F16539"), 
+      addLegend(position=c("topright"), colors=c("#F16539","#006CB6"), 
                 labels=c("Syssesatte personer i kommunen", "Sysselsattes bosted"),
                 opacity = 0.6)
   })
@@ -165,10 +167,10 @@ server <- function(input, output, session){
     observeEvent(list(input$display_panel, input$year), {
         proxy <- leafletProxy("map") %>%
           clearGroup(group = "kommuner") %>%
-          addPolygons(data = geodata$komm_shape, fillColor = "#ffffff", color="#4b7272", 
+          addPolygons(data = geodata$komm_shape, fillColor = "#ffffff", color="#274247", 
                     weight = 0.5, smoothFactor = 0.5,
-                    opacity = 0.8, fillOpacity = 0.3, label = geodata$komm_shape$NAVN,
-                    highlightOptions = highlightOptions(color = "#274247", 
+                    opacity = 0.8, fillOpacity = 0.6, label = geodata$komm_shape$NAVN,
+                    highlightOptions = highlightOptions(color = "#000000", 
                                                         weight = 1, bringToFront = FALSE),
                     layerId = ~NR,
                     group = "kommuner")
@@ -245,57 +247,38 @@ server <- function(input, output, session){
   })
   
   
-  # Create dynamic plot title - bosted
+  # Create dynamic plot title text - bosted
   output$selected_komm <- renderUI({ #dont use renderText here as doesnt recognise øåæ
     kommid <- data_of_click$clickedMarker$id
     if (is.null(kommid)) {
-      paste("No kommune selected")
+      paste("Ingen kommune valgt")
     } else if (is.na(kommid)) {
-      paste("No kommune selected")
+      paste("Ingen kommune valgt")
     } else {
-      paste(geodata$komm_shape$NAVN[match(kommid, geodata$komm_shape$NR)], " - ", input$year)
-    }
-  })
-  
-  # Create text under - bosted
-  output$selected_komm_text <- renderUI({ #dont use renderText here as doesnt recognise øåæ
-    kommid <- data_of_click$clickedMarker$id
-    if (is.null(kommid)) {
-      paste("")
-    } else if (is.na(kommid)) {
-      paste("")
-    } else {
+      komm_name <- geodata$komm_shape$NAVN[match(kommid, geodata$komm_shape$NR)]
       temp_num <- statdata$syss[match(kommid, statdata$syss$Region), "value"]
-      paste("Antall bosatte: ", temp_num)
+      HTML(paste0(komm_name, " kommune. ", input$year, "<br/>",
+                  "Antall sysselsatte personer med bostedsadresse: ", temp_num, "<br/>",
+                  "Arbeidssted:")
+      )
     }
-    
   })
   
 
-  # Create dynamic plot title - arbsted
+  # Create dynamic plot title text - arbsted
   output$selected_komm_arb <- renderUI({ #dont use renderText here as doesnt recognise øåæ
     kommid <- data_of_click_arb$clickedMarker$id
     if (is.null(kommid)) {
-      paste("No kommune selected")
+      paste("Ingen kommune valgt")
     } else if (is.na(kommid)) {
-      paste("No kommune selected")
+      paste("Ingen kommune valgt")
     } else {
-      paste(geodata$komm_shape$NAVN[match(kommid, geodata$komm_shape$NR)], " - ", input$year)
-    }
-  })
-  
-  # Create text under - arbsted
-  output$selected_komm_arb_text <- renderUI({ #dont use renderText here as doesnt recognise øåæ
-    kommid <- data_of_click_arb$clickedMarker$id
-    if (is.null(kommid)) {
-      paste("")
-    } else if (is.na(kommid)) {
-      paste("")
-    } else {
+      kommune_navn <- geodata$komm_shape$NAVN[match(kommid, geodata$komm_shape$NR)]
       temp_num <- statdata$arbb[match(kommid, statdata$arbb$Region), "value"]
-      paste("Antall sysselsatte arbeidssted: ", temp_num)
+      HTML(paste0(kommune_navn, " kommune. ", input$year, "<br/>",
+                  "Antall sysselsatte personer med arbeidsstedsadresse: ", temp_num, "<br/>",
+                  "Bosted:"))
     }
-    
   })
   
   
@@ -307,7 +290,7 @@ server <- function(input, output, session){
         Make_barplot(kommid, n = as.numeric(input$n), geodata$komm_shape, statdata$pend, antkom = antkom)
       }
     }
-  }, bg = "transparent") #, execOnResize = TRUE)
+  }, bg = "transparent")
   
   # Create dynamic plot - arbsted
   output$plot_arb <- renderPlot({
@@ -360,11 +343,11 @@ server <- function(input, output, session){
           # Add circles for employed living and working in selected kommune
           addCircles(data = outdata[[2]], lat =~lat, lng = ~lng,
                      radius = outdata[[5]], 
-                     color = "#F16539", stroke = F, fillOpacity = 0.8, 
+                     color = "#F16539", stroke = F, fillOpacity = 1, 
                      group = "circles"
           ) %>%
           
-          # Add total employment in other top commute kommune
+          # Add total employment in other top commute kommune - not working?
           addCircles(data = outdata[[1]],  lat = ~lat, lng=~lng, 
                      radius = outdata[[7]], 
                      stroke = F, color = "#F16539", fillOpacity = 0.2, 
@@ -440,5 +423,4 @@ server <- function(input, output, session){
 }
 
 #### Run app ####
-
 shinyApp(ui, server)
