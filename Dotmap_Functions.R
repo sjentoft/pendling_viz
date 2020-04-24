@@ -38,20 +38,24 @@ Load_geo_data <- function(year, package = TRUE){
 Load_stat_data <- function(year, komm_punkt){
   
   # Antall i befolkning og sysselsatte 15-74
-  dt <- ApiData(url = "https://data.ssb.no/api/v0/no/table/11618/"
-                , Region = TRUE, Kjonn = "0", Tid = year, Alder = "15-74",
-                ContentsCode =TRUE
-  )
-  dt <- Make_kommune(dt$dataset, komm_var = "Region", komm_punkt = komm_punkt)
+  #dt <- ApiData(url = "https://data.ssb.no/api/v0/no/table/11618/"
+  #              , Region = TRUE, Kjonn = "0", Tid = year, Alder = "15-74",
+  #              ContentsCode =TRUE
+  #)
+  #dt <- Make_kommune(dt$dataset, komm_var = "Region", komm_punkt = komm_punkt)
+
+  dt <- readRDS(paste0("data/data_kommune", year,".rds"))
+  
   befolk <- dt[dt$ContentsCode == "BefolkningBosted", ]
   syss <- dt[dt$ContentsCode == "SysselBosted", ]
   arbb <- dt[dt$ContentsCode == "SysselArbsted", ]
   
   #antall som pendler in og ut
-  dt <- ApiData(url = "https://data.ssb.no/api/v0/no/table/03321/"
-                , Tid = year, ArbstedKomm = TRUE, Bokommuen=TRUE)
-  pend <- Make_kommune(dt$dataset, "Bokommuen", komm_punkt = komm_punkt) #ta ut data vi ikke har punkter for
-  pend <- Make_kommune(pend, "ArbstedKomm", komm_punkt = komm_punkt) # ta ut linje vi ikke har arbsted punkt for
+  #dt <- ApiData(url = "https://data.ssb.no/api/v0/no/table/03321/"
+  #              , Tid = year, ArbstedKomm = TRUE, Bokommuen=TRUE)
+  #pend <- Make_kommune(dt$dataset, "Bokommuen", komm_punkt = komm_punkt) #ta ut data vi ikke har punkter for
+  #pend <- Make_kommune(pend, "ArbstedKomm", komm_punkt = komm_punkt) # ta ut linje vi ikke har arbsted punkt for
+  pend <- readRDS(paste0("data/data_pendling", year,".rds"))
   
   # Save matched kommune number order
   mat_pop <- match(as.factor(befolk$Region), komm_punkt$NR) 
@@ -118,7 +122,6 @@ UpdateKomm <- function(fil, year, type = "shapefil"){
 #'@param zip A character municipality number (4 digits)
 #'@param n Number of municipalties to show
 #'@return A barplot is returned
-
 Make_barplot <- function(zip, n, komm_shape, pend, antkom, scaleLine = FALSE){
   dat <- pend[pend$Bokommuen == zip & pend$value > 0, ]
   n <- min(n, nrow(dat)) # check there is enough data for n
@@ -145,25 +148,30 @@ Make_barplot <- function(zip, n, komm_shape, pend, antkom, scaleLine = FALSE){
   test2$NAVN = factor(test2$NAVN, levels = rev(test2$NAVN))
   test2$value = as.numeric(as.character(test2$value))
   
+  # Cut long names shorter
+  test2$NAVN2 <- as.character(test2$NAVN)
+  test2$NAVN2[str_length(test2$NAVN)>16] <- paste0(substr(test2$NAVN2[str_length(test2$NAVN) > 16], 1, 14), "...")
+  test2$NAVN2 = factor(test2$NAVN2, levels = rev(test2$NAVN2))
+  
   # Need to map windows font - doesn't work on server 
   # windowsFonts(Open_Sans = windowsFont("Open Sans")) - not working on server
-  
+  par(xpd=TRUE)
   ggplot(test2, aes(x=NAVN, y=value, 
                     #fill=NAVN == topKom$NAVN[1])
                     fill=NAVN == selected_navn)
          ) +
     geom_bar(stat="identity", alpha=1) +
-    geom_text(hjust=-.1, aes(label=format(value, big.mark = " ")), size=2, 
+    geom_text(hjust=-.1, aes(label=format(value, big.mark = " ")), size=3, 
               alpha=c(rep(1, sum(test2$value>0)), rep(0, sum(test2$value==0)))) +
     ylab("") +
     xlab("") +
-    ylim(0, max(test2$value)*1.15) +
+    ylim(0, max(test2$value)*1.3) +
     coord_flip() +
-    scale_fill_manual(values=c("#F16539", "#93180A")) +
+    scale_fill_manual(values=c("#F8A67D", "#C4351C")) +
     theme_light() +
-    scale_x_discrete(breaks=test2$NAVN , labels=c(as.character(test2$NAVN[seq(nrow(topKom))]), rep(" ",n_invisible))) +
+    scale_x_discrete(breaks=test2$NAVN , labels=c(as.character(test2$NAVN2[seq(nrow(topKom))]), rep(" ",n_invisible))) +
     theme(legend.position = "none", 
-          text = element_text(size=10), #family = "Open Sans", 
+          text = element_text(size=10), #, family = "Open Sans"), 
           panel.grid = element_blank(),
           panel.border = element_blank(),
           axis.ticks = element_blank(),
@@ -196,24 +204,29 @@ Make_barplot_arb <- function(zip, n, komm_shape, pend, antkom, scaleLine = FALSE
     test2 = as_tibble(topKom[seq(n_bars), c("NAVN", "value")])
   }
   
+  # Cut long names shorter
+  test2$NAVN2 <- as.character(test2$NAVN)
+  test2$NAVN2[str_length(test2$NAVN) > 16] <- paste0(substr(test2$NAVN2[str_length(test2$NAVN) > 16], 1, 14), "...")
+  test2$NAVN2 = factor(test2$NAVN2, levels = rev(test2$NAVN2))
+  
   test2$NAVN = factor(test2$NAVN, levels = rev(test2$NAVN))
   test2$value = as.numeric(as.character(test2$value))
   
-  ggplot(test2, aes(x=NAVN, y=value, 
-                    fill=NAVN == selected_navn)
+  ggplot(test2, aes(x = NAVN, y=value, 
+                    fill = NAVN == selected_navn)
   ) +
     geom_bar(stat="identity", alpha=1)+
-    geom_text(hjust=-.1, aes(label=format(value, big.mark = " ")), size=2, 
+    geom_text(hjust=-.1, aes(label=format(value, big.mark = " ")), size=4, 
               alpha=c(rep(1, sum(test2$value>0)), rep(0, sum(test2$value==0)))) +
     ylab("") +
     xlab("") +
-    ylim(0, max(test2$value)*1.15) +
+    ylim(0, max(test2$value)*1.3) +
     coord_flip() +
-    scale_fill_manual(values=c("#006CB6", "#0000A0")) +
+    scale_fill_manual(values=c("#83C1E9", "#006CB6")) +
     theme_light() +
-    scale_x_discrete(breaks=test2$NAVN , labels=c(as.character(test2$NAVN[seq(nrow(topKom))]), rep(" ",n_invisible))) +
+    scale_x_discrete(breaks=test2$NAVN, labels=c(as.character(test2$NAVN2[seq(nrow(topKom))]), rep(" ",n_invisible))) +
     theme(legend.position = "none", 
-          text = element_text( size=10), #family = "Open Sans",
+          text = element_text(size=12), #family = "Open Sans",
           panel.grid = element_blank(),
           panel.border = element_blank(),
           axis.ticks = element_blank(),
